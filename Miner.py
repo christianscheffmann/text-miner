@@ -24,38 +24,49 @@ def defaultdict_list(lst):
     
     
 class CorpusMiner:
-    # Iterator of file paths and document bytes
+    # Iterator of file refs, file types and document bytes
     def __init__(self, byte_ref_iterator, save_blobs=False):
-        extracted_data = {}
-        corpus_dict = Dictionary()
-        for ref, doc_bytes in tqdm(byte_ref_iterator):
-            text = DocumentHandler.process(Path(fn).suffix, doc_bytes)
-            miner = DocumentMiner(text)
+        #extracted_data = {}
+        #corpus_dict = Dictionary()
+        for ref, ft, doc_bytes in tqdm(byte_ref_iterator):
+            try:
+                text = DocumentHandler.process(ft, doc_bytes)
+                miner = DocumentMiner(text)
+            except Exception:
+                continue
             
             if save_blobs:
-                path = Path("blobs/" + ref + ".pkl").mkdir(parents=True, exist_ok=True)
+                path = Path("blobs/" + ref + ".pkl")
+                path.mkdir(parents=True, exist_ok=True)
                 with path.open('wb') as fp:
                     pickle.dump(miner.lemmas, fp)
 
-            extracted_data[ref] = miner.extracted_data
+            #extracted_data[ref] = miner.extracted_data
 
-            d = defaultdict(dict)
+            #d = defaultdict(dict)
 
-            for k, v in miner.inverted_index_entries:
-                d[k][ref] = v
+            #for k, v in miner.inverted_index_entries:
+            #    d[k][ref] = v
 
-            corpus_dict.add_documents([miner.lemmas])
+            path = Path("inverted_index/" + ref + ".json")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w") as fp:
+                json.dump(miner.inverted_index_entries, fp, indent=4)
 
-        path = Path("extracted_data.json")
-        with path.open("w") as fp:
-            json.dump(extracted_data, fp, indent=4)
 
-        corpus_dict.save("dictionary.dct")
+            #corpus_dict.add_documents([miner.lemmas])
+
+            path = Path("extracted_data/" + ref + ".json")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w") as fp:
+                json.dump(miner.extracted_data, fp, indent=4)
+
+        #corpus_dict.save("dictionary.dct")
 
         
     @classmethod
-    def from_path_iterator(cls, path_iterator):
-        return cls(list((e, e.read_bytes()) for e in path_iterator))
+    def from_path_iterator(cls, path_iterator, save_blobs=False):
+        return cls(((str(p), p.suffix, p.read_bytes()) for p in path_iterator), save_blobs)
 
 
 class DocumentMiner:
@@ -77,7 +88,7 @@ class DocumentMiner:
 
 
         self.extracted_data = {n: re.findall(DocumentMiner.regex_dict[n], text) for n in DocumentMiner.regex_dict.keys()}
-        self.extracted_data["entities"] = set([(e.text, e.label_) for e in doc.ents])
+        self.extracted_data["entities"] = list(set([(e.text, e.label_) for e in doc.ents]))
 
         filtered_words = [w for w in doc if not w.is_stop and not w.is_punct and not w.is_space]
         
